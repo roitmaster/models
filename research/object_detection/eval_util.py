@@ -29,10 +29,12 @@ from object_detection.metrics import coco_evaluation
 from object_detection.utils import label_map_util
 from object_detection.utils import ops
 from object_detection.utils import visualization_utils as vis_utils
+import glob
+
 
 slim = tf.contrib.slim
 
-BEST_RES = 0.9
+BEST_RES = [0.85]*5
 
 
 def write_metrics(metrics, global_step, summary_dir):
@@ -336,16 +338,29 @@ def _run_checkpoint_once(tensor_dict,
             for key, value in iter(aggregate_result_losses_dict.items()):
                 all_evaluator_metrics['Losses/' + key] = np.mean(value)
     global BEST_RES
-    if save_graph and all_evaluator_metrics["PascalBoxes_Precision/mAP@0.5IOU"] > BEST_RES:
+    if (save_graph):
+      print('you have chosen save_graph option, the saved checkpoints will be saved in {}'.format(save_graph_dir))
+      print("BEST_RES", BEST_RES)
+      min_RES = min(BEST_RES)
+      print("min_RES", min_RES)
+      new_RES = all_evaluator_metrics["PascalBoxes_Precision/mAP@0.5IOU"]
+      print("new_RES", new_RES)
+   
+    if save_graph and new_RES > min_RES:
+      BEST_RES.remove(min_RES)
       #remove previews best 
-    prev_model = glob.glob(os.path.join(save_graph_dir, ("eval_global_mAP@0.5IOU_{:.4f}*").format(BEST_RES)))
-    for m in prev_model:
-      if os.path.exists(m):
-        os.remove(m)
-    BEST_RES = all_evaluator_metrics["PascalBoxes_Precision/mAP@0.5IOU"]
-    model_save_path = os.path.join(save_graph_dir, ("eval_global_mAP@0.5IOU_{:.4f}_{}.ckpt").format(BEST_RES, global_step))
-    saver = tf.train.Saver()
-    saver.save(sess, model_save_path)
+      prev_model = glob.glob(os.path.join(save_graph_dir, ("eval_global_mAP@0.5IOU_{:.4f}*").format(min_RES)))
+      print("The following prev_model {} ...".format(prev_model))
+      for m in prev_model:
+        if os.path.exists(m):
+          os.remove(m)
+          print("has been successfully deleted")
+      BEST_RES.append(new_RES)
+      model_save_path = os.path.join(save_graph_dir, ("eval_global_mAP@0.5IOU_{:.4f}_{}.ckpt").format(new_RES, global_step))
+      print("updated_BESTRES", BEST_RES)
+      print("Your new model is saved at {}".format(model_save_path))
+      saver = tf.train.Saver()
+      saver.save(sess, model_save_path)
     sess.close()
     return (global_step, all_evaluator_metrics)
 
